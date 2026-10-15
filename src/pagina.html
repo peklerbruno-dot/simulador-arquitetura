@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulador de Interiores</title>
+<meta name="theme-color" content="#1d2530">
+<script>
+// Publicado como site (ex.: GitHub Pages): vira app instalável e abre sem
+// internet. Aberto com duplo clique ou no claude.ai, nada disso é usado.
+if (/^https?:$/.test(location.protocol) && !/claude/.test(location.hostname)) {
+  document.head.append(Object.assign(document.createElement('link'), { rel: 'manifest', href: 'app/manifest.webmanifest' }));
+  document.head.append(Object.assign(document.createElement('link'), { rel: 'apple-touch-icon', href: 'app/icone-192.png' }));
+  document.head.append(Object.assign(document.createElement('link'), { rel: 'icon', href: 'app/icone-192.png' }));
+  if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+</script>
+<style>
+/* =====================================================================
+   ESTILO
+   ===================================================================== */
+:root {
+  --fundo: #f6f7f9; --painel: #ffffff; --linha: #e3e6ea; --texto: #1d2530; --suave: #6b7480;
+  --azul: #2f80ed; --azul-claro: #e8f1fd; --vermelho: #d0453b; --verde: #2e8b57;
+  --raio: 10px; --lateral: 272px; --painel-w: 300px; --barra: 52px;
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--texto);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--fundo); }
+button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--linha); background: #fff;
+  border-radius: 8px; padding: 6px 10px; touch-action: manipulation; }
+button:hover:not(:disabled) { border-color: #c5cbd3; background: #fafbfc; }
+button:disabled { opacity: .4; cursor: default; }
+button.ligado { background: var(--azul-claro); border-color: var(--azul); color: var(--azul); }
+button.perigo { color: var(--vermelho); }
+button.link { border: 0; background: none; padding: 2px 0; color: var(--azul); font-size: 12px; }
+button.link.perigo { color: var(--vermelho); }
+
+#app { display: grid; height: 100%; grid-template: var(--barra) 1fr / var(--lateral) 1fr; position: relative; }
+
+/* ---- barra superior */
+#barra { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 0 12px;
+  background: var(--painel); border-bottom: 1px solid var(--linha); min-width: 0; }
+.marca { font-weight: 700; white-space: nowrap; }
+#abas { display: flex; gap: 4px; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: none; }
+.aba { white-space: nowrap; border-radius: 999px; padding: 6px 14px; display: flex; gap: 8px; align-items: center; }
+.aba.ativa, .aba.ativa:hover:not(:disabled) { background: var(--texto); color: #fff; border-color: var(--texto); }
+.aba .fechar { opacity: .6; font-size: 16px; line-height: 1; }
+.aba .fechar:hover { opacity: 1; }
+.aba.nova { padding: 6px 12px; font-weight: 600; }
+.acoes { display: flex; gap: 6px; align-items: center; }
+.acoes button { white-space: nowrap; }
+details.menu { position: relative; }
+details.menu summary { list-style: none; cursor: pointer; border: 1px solid var(--linha); border-radius: 8px; padding: 6px 10px; background: #fff; }
+details.menu summary::-webkit-details-marker { display: none; }
+details.menu > div { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; background: #fff; border: 1px solid var(--linha);
+  border-radius: var(--raio); box-shadow: 0 10px 30px rgba(20,30,40,.14); padding: 6px; display: grid; min-width: 230px; }
+details.menu > div button { border: 0; text-align: left; padding: 8px 10px; }
+details.menu > div hr { border: 0; border-top: 1px solid var(--linha); margin: 4px 0; }
+#bLateral { display: none; }
+
+/* ---- lateral esquerda */
+#lateral { background: var(--painel); border-right: 1px solid var(--linha); overflow-y: auto; padding: 12px; }
+#lateral h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); margin: 14px 0 8px; }
+#lateral h2:first-child { margin-top: 0; }
+#avisoPlanta { background: #fff6e0; border: 1px solid #f0d58a; color: #6b5310; border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-bottom: 10px; }
+.tab-areas { width: 100%; border-collapse: collapse; }
+.tab-areas td { padding: 5px 4px; border-bottom: 1px solid var(--linha); }
+.tab-areas td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.tab-areas tr { cursor: pointer; }
+.tab-areas tr:hover td { background: #fafbfc; }
+.tab-areas tr.ativo td { background: var(--azul-claro); color: var(--azul); }
+.tab-areas tr.soma td { font-weight: 600; border-bottom: 0; cursor: default; background: none; }
+.comparativo { background: var(--fundo); border-radius: 8px; padding: 8px 10px; margin-top: 6px; display: grid; gap: 3px; }
+.comparativo div { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.comparativo b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.comparativo .ok b { color: var(--verde); }
+.comparativo .alerta b { color: #b7791f; }
+.interruptor { display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer; }
+.interruptor em { margin-left: auto; font-style: normal; font-size: 12px; color: var(--suave); }
+#buscaCatalogo { width: 100%; padding: 7px 10px; border: 1px solid var(--linha); border-radius: 8px; font: inherit; margin-bottom: 4px; }
+#catalogo h4 { margin: 10px 0 4px; font-size: 12px; color: var(--suave); font-weight: 600; }
+.item-cat { display: flex; width: 100%; align-items: center; gap: 8px; border: 0; padding: 6px 6px; border-radius: 6px; text-align: left; }
+.item-cat:hover { background: var(--fundo) !important; }
+.item-cat i { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,.12); flex: none; }
+.item-cat span { flex: 1; }
+.item-cat em { font-style: normal; font-size: 12px; color: var(--suave); }
+.nota { font-size: 12px; color: var(--suave); margin: 6px 0 0; }
+#salvo { font-size: 11px; color: var(--suave); margin-top: 16px; }
+
+/* ---- palco 3D */
+#palco { position: relative; overflow: hidden; min-width: 0; }
+#palco canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+#rotulos { position: absolute; inset: 0; pointer-events: none; }
+.rotulo { position: absolute; left: 0; top: 0; background: rgba(255,255,255,.86); border-radius: 8px; padding: 3px 9px;
+  text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.08); white-space: nowrap; }
+.rotulo b { display: block; font-size: 12px; }
+.rotulo span { font-size: 12px; color: var(--suave); font-variant-numeric: tabular-nums; }
+.rotulo.ativo { background: var(--azul); color: #fff; }
+.rotulo.ativo span { color: #dce9fb; }
+#avisos { position: absolute; left: 12px; bottom: 12px; max-width: min(560px, calc(100% - 24px)); background: #fff; border: 1px solid #f1c6c2;
+  border-radius: var(--raio); padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+#avisos b { color: var(--vermelho); margin-right: 4px; }
+#avisos button { font-size: 12px; padding: 3px 8px; border-color: #f1c6c2; }
+#avisos span { font-size: 12px; color: var(--suave); }
+#bussola { position: absolute; top: 12px; left: 12px; width: 40px; height: 40px; pointer-events: none; }
+#bussola { top: 18px; left: 18px; }
+#bussola b { position: absolute; left: 20px; top: -7px; transform: translate(-50%, -50%); font-size: 11px; color: var(--vermelho); }
+.luz-local { font-size: 13px; margin-bottom: 8px; }
+.faixa-hora { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; margin-top: 8px; }
+.faixa-hora span { font-size: 12px; color: var(--suave); }
+.faixa-hora b { text-align: right; font-variant-numeric: tabular-nums; }
+.faixa-hora input { grid-column: 1 / -1; width: 100%; accent-color: #e0a030; }
+#cotas { position: absolute; inset: 0; pointer-events: none; }
+.cota { position: absolute; left: 0; top: 0; pointer-events: auto; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 6px;
+  background: #1d2530; color: #fff; border: 0; font-variant-numeric: tabular-nums; }
+.cota::after { content: ' cm'; font-weight: 400; opacity: .7; }
+.cota:hover { background: var(--azul) !important; }
+.cota-campo { position: absolute; left: 0; top: 0; width: 64px; pointer-events: auto; font: inherit; font-size: 13px; padding: 2px 6px;
+  border: 2px solid var(--azul); border-radius: 6px; }
+.rotulo-zona { position: absolute; left: 0; top: 0; font-size: 11px; font-weight: 600; color: #fff; background: var(--cor); padding: 1px 7px;
+  border-radius: 999px; white-space: nowrap; opacity: .85; pointer-events: none; }
+.rotulo-zona.ativo { opacity: 1; box-shadow: 0 0 0 2px #fff; }
+.opcoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.opcoes button { font-size: 13px; padding: 5px 9px; }
+.opcoes button.ativo { background: var(--texto); color: #fff; border-color: var(--texto); }
+.opcoes button[style*="--cor"].ativo { background: var(--cor); border-color: var(--cor); }
+button.acao { width: 100%; background: var(--azul); color: #fff; border-color: var(--azul); font-weight: 600; padding: 9px; }
+button.acao:hover:not(:disabled) { background: #2a6fd0; border-color: #2a6fd0; }
+.linha-uso { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 5px 8px; border-radius: 6px; margin-bottom: 4px; }
+.linha-uso.ok { background: #eaf6ef; color: var(--verde); }
+.linha-uso.alerta { background: #fdecea; color: var(--vermelho); }
+.lista-moveis { display: grid; gap: 2px; }
+.lista-moveis button { display: flex; justify-content: space-between; gap: 8px; border: 0; padding: 6px 4px; text-align: left; border-radius: 6px; }
+.lista-moveis em { font-style: normal; font-size: 12px; color: var(--suave); white-space: nowrap; }
+.item-canto { display: flex; width: 100%; align-items: center; gap: 8px; border: 0; padding: 5px 6px; border-radius: 6px; text-align: left; }
+.item-canto i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.item-canto span { flex: 1; }
+.item-canto em { font-style: normal; font-size: 12px; color: var(--suave); }
+.item-canto.ativo { background: var(--azul-claro); }
+body.caminhando #bussola, body.caminhando #ajuda { display: none; }
+.foto-folha { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(460px, calc(100% - 24px)); z-index: 30;
+  background: rgba(255,255,255,.97); border-radius: 16px; padding: 14px 16px 16px; box-shadow: 0 10px 34px rgba(0,0,0,.22); max-height: calc(100% - 28px); overflow-y: auto; }
+.foto-folha h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--suave); }
+.foto-folha .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.foto-folha .chips button { border-radius: 999px; padding: 8px 13px; }
+.foto-folha .chips button.ativo { background: var(--texto); color: #fff; border-color: var(--texto); }
+.foto-folha .x { border: 0; background: none; font-size: 16px; padding: 2px 6px; }
+button.grande { width: 100%; margin-top: 14px; padding: 13px; font-size: 16px; font-weight: 600; background: var(--azul); color: #fff; border-color: var(--azul); border-radius: 12px; }
+.foto-topo { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.foto-topo span { font-size: 12px; color: var(--suave); font-variant-numeric: tabular-nums; }
+.foto-tela { position: absolute; inset: 0; z-index: 30; background: #111; display: flex; align-items: center; justify-content: center; }
+.foto-tela img { width: 100%; height: 100%; object-fit: contain; -webkit-touch-callout: default; user-select: auto; }
+#fotoPrevia { filter: blur(6px) brightness(.8); transform: scale(1.04); }
+.foto-cartao { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(440px, calc(100% - 24px));
+  background: rgba(255,255,255,.96); border-radius: 14px; padding: 12px 14px; box-shadow: 0 10px 34px rgba(0,0,0,.3); }
+.foto-cartao > span { font-size: 12px; color: var(--suave); font-variant-numeric: tabular-nums; }
+.foto-cartao .luz { align-items: center; margin-top: 0; }
+.foto-cartao .luz span { font-size: 12px; color: var(--suave); margin-right: auto; }
+.foto-barra { height: 6px; background: var(--linha); border-radius: 6px; margin: 8px 0 6px; overflow: hidden; }
+.foto-barra i { display: block; height: 100%; width: 0; background: var(--azul); transition: width .25s; }
+button.acao-sec { background: var(--texto); color: #fff; border-color: var(--texto); }
+body.modo-foto #rotulos, body.modo-foto #cotas, body.modo-foto #avisos, body.modo-foto #ajuda, body.modo-foto #painel { display: none !important; }
+body.modo-foto #bFoto { background: var(--azul-claro); border-color: var(--azul); color: var(--azul); }
+/* menu "Mais" */
+#bMais { font-size: 15px; padding: 6px 12px; border-radius: 999px; }
+#bMais span[aria-hidden] { font-size: 20px; line-height: 1; vertical-align: -2px; }
+#menuMais { position: fixed; inset: 0; z-index: 60; background: rgba(20,25,32,.35); display: flex; justify-content: flex-end; align-items: flex-start; padding: 56px 12px 0; }
+#menuMais[hidden] { display: none; }
+.folha-menu { background: #fff; border-radius: 16px; width: min(360px, 100%); padding: 8px 8px 12px; box-shadow: 0 16px 40px rgba(0,0,0,.25); }
+.folha-menu header { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px 8px; }
+.folha-menu header button { border: 0; background: none; font-size: 18px; padding: 4px 8px; }
+.folha-menu > button { display: grid; grid-template-columns: 36px 1fr; grid-template-rows: auto auto; column-gap: 8px; width: 100%; text-align: left;
+  border: 0; border-radius: 12px; padding: 10px 8px; background: none; }
+.folha-menu > button:hover, .folha-menu > button:active { background: var(--azul-claro); }
+.folha-menu > button span { grid-row: span 2; font-size: 22px; display: grid; place-items: center; }
+.folha-menu > button b { font-size: 15px; font-weight: 600; }
+.folha-menu > button small { font-size: 12px; color: var(--suave); }
+.folha-menu > button.perigo b { color: var(--vermelho); }
+/* zoom e desfazer */
+#controlesEsq { position: absolute; left: 12px; top: 64px; display: grid; gap: 6px; z-index: 11; }
+#controlesEsq button { width: 44px; height: 44px; border-radius: 12px; font-size: 20px; padding: 0; background: rgba(255,255,255,.94); box-shadow: 0 2px 10px rgba(20,30,40,.1); }
+#controlesEsq button:disabled { opacity: .4; }
+#bDesfazer { margin-top: 8px; }
+body.caminhando #controlesEsq { display: none; }
+/* cômodos: no Visitar embaixo (andar até lá); nos outros modos em cima (enquadrar) */
+body:not(.modo-visitar) #vistas { top: 12px; bottom: auto; left: 64px; right: 84px; }
+body:not(.modo-visitar) #vistas button { padding: 7px 12px; font-size: 13px; }
+body:not(.modo-visitar) #vistas button.sol { display: none; }
+/* conflitos recolhidos numa etiqueta */
+#avisos.recolhido button, #avisos.recolhido span { display: none; }
+#avisos > b { cursor: pointer; }
+/* gaveta do móvel no celular */
+.puxador { display: none; }
+.mover { display: grid; grid-template-columns: auto repeat(4, 40px); gap: 6px; align-items: center; margin: 0 0 10px; }
+.mover small { color: var(--suave); font-size: 12px; margin-right: 4px; }
+.mover button { height: 36px; padding: 0; font-size: 16px; border-radius: 10px; }
+.rotulo.janela { background: #2f80ed; color: #fff; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+/* régua e alinhar */
+#reguaRotulos { position: absolute; inset: 0; pointer-events: none; z-index: 7; }
+.regua-rot { position: absolute; left: 0; top: 0; background: #e5484d; color: #fff; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
+  white-space: nowrap; font-variant-numeric: tabular-nums; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+#reguaBarra { position: absolute; left: 50%; top: 56px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 10px;
+  background: rgba(29,37,48,.92); color: #fff; border-radius: 999px; padding: 6px 6px 6px 16px; font-size: 13px; box-shadow: 0 6px 22px rgba(0,0,0,.2); max-width: calc(100% - 24px); }
+#reguaBarra span { opacity: .8; }
+#reguaBarra button { border: 0; background: rgba(255,255,255,.16); color: #fff; border-radius: 999px; padding: 6px 12px; }
+.alinhar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.alinhar button { padding: 8px 4px; font-size: 13px; }
+.acoes-rapidas button.ativo { background: var(--azul-claro); border-color: var(--azul); }
+/* simulação de uso */
+body.cinema #vistas, body.cinema #rotulos, body.cinema #cotas, body.cinema #avisos, body.cinema #ajuda, body.cinema #painel, body.cinema #solVisita { display: none !important; }
+#usoBarra { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 10px;
+  max-width: calc(100% - 100px); background: rgba(29,37,48,.92); color: #fff; border-radius: 999px; padding: 6px 6px 6px 16px; box-shadow: 0 6px 22px rgba(0,0,0,.2); font-size: 13px; }
+#usoBarra b { white-space: nowrap; font-weight: 600; }
+#usoBarra span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+#usoBarra button { border: 0; background: rgba(255,255,255,.14); color: #fff; width: 32px; height: 32px; border-radius: 50%; padding: 0; }
+@media (max-width: 700px) {
+  #usoBarra { top: auto; bottom: 12px; left: 12px; right: 12px; transform: none; max-width: none; border-radius: 14px; flex-wrap: wrap; row-gap: 2px; padding: 8px 8px 8px 14px; }
+  #usoBarra span { order: 5; flex-basis: 100%; white-space: normal; opacity: .9; }
+  #usoBarra b { margin-right: auto; }
+}
+#medidasUso { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+body:not(.cinema-uso) #medidasUso { display: none; }
+.medida { position: absolute; left: 0; top: 0; font-size: 10.5px; font-weight: 600; line-height: 1.25; padding: 2px 6px; border-radius: 6px; width: max-content;
+  color: #fff; font-variant-numeric: tabular-nums; box-shadow: 0 1px 4px rgba(0,0,0,.25); max-width: 200px; }
+.medida.abre { background: #c0661c; }
+.medida.ok { background: #1e8449; }
+.medida.atencao { background: #b7791f; }
+.medida.problema { background: #c0392b; }
+#usoBarra button.medir { opacity: .55; }
+#usoBarra button.medir.ligado { opacity: 1; background: rgba(255,255,255,.28); }
+#dica { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: var(--texto); color: #fff; padding: 4px 10px; border-radius: 999px; font-size: 12px; pointer-events: none; }
+#ajuda { position: absolute; right: 12px; bottom: 12px; font-size: 11px; color: var(--suave); background: rgba(255,255,255,.8); border-radius: 8px; padding: 4px 8px; pointer-events: none; }
+#toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: var(--texto); color: #fff; padding: 10px 16px;
+  border-radius: 10px; opacity: 0; transition: .2s; pointer-events: none; z-index: 50; max-width: 90vw; }
+#toast.visivel { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---- painel da seleção */
+/* flutua sobre a cena: abrir o painel não muda o tamanho da vista 3D */
+#painel { position: absolute; top: var(--barra); right: 0; bottom: 0; width: var(--painel-w); overflow: hidden auto; z-index: 10;
+  background: var(--painel); border-left: 1px solid var(--linha); padding: 12px 14px 20px; box-shadow: -8px 0 24px rgba(20,30,40,.06); display: none; }
+body.com-painel #painel { display: block; }
+body.com-painel #ajuda { display: none; }
+#painel header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+#painel header small { color: var(--suave); font-size: 12px; }
+#painel header h2 { margin: 0; font-size: 17px; }
+#painel .fechar { border: 0; font-size: 20px; line-height: 1; padding: 2px 6px; }
+.bloco { border-top: 1px solid var(--linha); padding: 10px 0; }
+.bloco h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); }
+.grade2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grade3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.campo { display: grid; grid-template-columns: 1fr auto; align-items: center; border: 1px solid var(--linha); border-radius: 8px; padding: 3px 8px 5px; background: #fff; }
+.campo:focus-within { border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-claro); }
+.campo span { grid-column: 1 / -1; font-size: 11px; color: var(--suave); }
+.campo input, .campo select { border: 0; outline: 0; font: inherit; font-size: 15px; width: 100%; min-width: 0; padding: 0; background: none; font-variant-numeric: tabular-nums; }
+.campo em { font-style: normal; font-size: 11px; color: var(--suave); }
+.campo.largo { grid-template-columns: 1fr; }
+.campo.cor { grid-template-columns: 1fr; }
+.campo.cor input { height: 28px; cursor: pointer; }
+.linha-botoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.linha-botoes.fim { border-top: 1px solid var(--linha); padding-top: 12px; }
+.status { border-radius: 8px; padding: 7px 10px; font-size: 13px; margin-bottom: 8px; }
+.status.ok { background: #eaf6ef; color: var(--verde); }
+.status.alerta { background: #fdecea; color: var(--vermelho); }
+.abertura { border: 1px solid var(--linha); border-radius: 8px; padding: 8px; margin-bottom: 8px; }
+.abertura.ativa { border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-claro); }
+.abertura-cab { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.area-grande { font-size: 26px; font-weight: 700; margin: 4px 0 10px; }
+.area-grande small { display: block; font-size: 12px; font-weight: 400; color: var(--suave); }
+
+/* ---- diálogo .glb */
+dialog { border: 0; border-radius: 14px; padding: 18px; width: min(420px, 92vw); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+dialog h3 { margin: 0 0 12px; }
+dialog form { display: grid; gap: 10px; }
+dialog p { margin: 0; font-size: 13px; color: var(--suave); }
+dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; margin: 6px 0 0; }
+dialog button[value="ok"] { background: var(--azul); color: #fff; border-color: var(--azul); }
+
+/* ---- telas estreitas (celular / tablet em pé) */
+@media (max-width: 860px) {
+  :root { --barra: 96px; }
+  #app { grid-template: var(--barra) 1fr / 1fr; }
+  #barra { flex-wrap: wrap; align-content: center; row-gap: 6px; padding: 6px 10px; }
+  #abas { order: 3; flex-basis: 100%; }
+  .acoes { flex: 1; justify-content: flex-end; gap: 4px; }
+  .acoes button, details.menu summary { padding: 6px 7px; white-space: nowrap; font-size: 13px; }
+  #bEnquadrar { display: none; }
+  .marca { display: none; }
+  #bLateral { display: inline-block; }
+  #lateral { position: fixed; top: var(--barra); bottom: 0; left: 0; width: min(88vw, 320px); z-index: 30; transform: translateX(-102%);
+    transition: transform .2s; box-shadow: 10px 0 30px rgba(0,0,0,.12); }
+  body.lateral-aberta #lateral { transform: none; }
+  #painel { position: fixed; top: auto; left: 0; right: 0; bottom: 0; width: auto; z-index: 25; max-height: 48vh; border-left: 0; border-top: 1px solid var(--linha);
+    box-shadow: 0 -10px 30px rgba(0,0,0,.12); border-radius: 14px 14px 0 0; }
+  .acoes .texto { display: none; }
+  #ajuda { display: none; }
+}
+
+/* =====================================================================
+   MODOS (Visitar · Arrumar · Conferir)
+   ===================================================================== */
+:root { --modos: 62px; }
+#app { grid-template: "barra barra" var(--barra) "lateral palco" 1fr "modos modos" var(--modos) / var(--lateral) 1fr; }
+body.modo-visitar #app { grid-template-columns: 0 1fr; }
+#barra { grid-area: barra; } #lateral { grid-area: lateral; } #palco { grid-area: palco; } #modos { grid-area: modos; }
+body.modo-visitar #lateral { display: none; }
+body:not(.modo-visitar) .so-visitar, body:not(.modo-arrumar) .so-arrumar, body:not(.modo-conferir) .so-conferir { display: none !important; }
+body.modo-visitar #rotulos, body.modo-visitar #avisos, body.modo-visitar #cotas { display: none !important; }
+body.modo-conferir #avisos { display: none !important; }
+#painel { bottom: var(--modos) !important; }
+
+#modos { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--painel); border-top: 1px solid var(--linha); z-index: 40; }
+#modos button { border: 0; border-radius: 0; background: none; display: grid; grid-template-columns: auto auto; justify-content: center; align-items: center;
+  column-gap: 8px; padding: 6px; color: var(--suave); }
+#modos button span { grid-row: span 2; font-size: 22px; }
+#modos button b { font-size: 14px; text-align: left; }
+#modos button small { font-size: 11px; text-align: left; }
+#modos button.ativo { color: var(--texto); background: var(--azul-claro); box-shadow: inset 0 3px 0 var(--azul); }
+
+#ferramentas { position: absolute; right: 12px; top: 12px; display: grid; gap: 6px; z-index: 11; }
+#ferramentas button { width: 58px; height: 52px; display: grid; place-items: center; align-content: center; gap: 1px; padding: 4px; border-radius: 12px;
+  background: rgba(255,255,255,.94); box-shadow: 0 2px 10px rgba(20,30,40,.1); }
+#ferramentas button span { font-size: 18px; line-height: 1; }
+#ferramentas .rot { font-size: 10px; color: var(--suave); }
+#ferramentas button.ligado { background: var(--azul); border-color: var(--azul); }
+#ferramentas button.ligado span, #ferramentas button.ligado .rot { color: #fff; }
+body.com-painel #ferramentas { right: calc(var(--painel-w) + 12px); }
+
+#vistas { position: absolute; left: 12px; right: 84px; bottom: 12px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; z-index: 11; padding: 2px; }
+#vistas { pointer-events: none; } /* a faixa não bloqueia a cena; só os botões respondem */
+#vistas button { pointer-events: auto; white-space: nowrap; border-radius: 999px; padding: 9px 14px; background: rgba(255,255,255,.94); box-shadow: 0 2px 10px rgba(20,30,40,.1); font-weight: 500; }
+#vistas button.ativo { background: var(--texto); color: #fff; border-color: var(--texto); }
+#vistas button.sol { margin-left: auto; }
+#solVisita { position: absolute; left: 12px; bottom: 64px; width: min(360px, calc(100% - 24px)); background: rgba(255,255,255,.96); border-radius: 14px;
+  padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.15); z-index: 12; }
+#solVisita input { width: 100%; accent-color: #e0a030; }
+
+#bGaveta { display: none; }
+
+/* catálogo com miniaturas */
+#catalogo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#catalogo h4 { grid-column: 1 / -1; margin: 10px 0 0; }
+.cartao-cat { display: grid; grid-template-rows: auto auto; gap: 2px; padding: 6px; border-radius: 10px; text-align: left; background: #fff; }
+.cartao-cat:hover { border-color: var(--azul) !important; }
+.cartao-cat .mini { aspect-ratio: 1; border-radius: 8px; background: #f2f0ec center / cover no-repeat; display: grid; place-items: center; color: var(--suave); font-size: 11px; }
+.cartao-cat b { font-size: 12px; font-weight: 600; line-height: 1.2; }
+.cartao-cat em { font-style: normal; font-size: 11px; color: var(--suave); }
+
+/* painel do móvel compacto */
+.acoes-rapidas { display: grid; grid-template-columns: repeat(auto-fit, minmax(50px, 1fr)); gap: 6px; margin: 4px 0 10px; }
+.acoes-rapidas button { display: grid; place-items: center; gap: 2px; padding: 8px 2px; font-size: 18px; border-radius: 10px; }
+.acoes-rapidas button small { font-size: 10px; color: var(--suave); }
+.acoes-rapidas button.perigo small { color: var(--vermelho); }
+details.mais { border-top: 1px solid var(--linha); }
+details.mais > summary { cursor: pointer; padding: 10px 0; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); font-weight: 600; list-style: none; }
+details.mais > summary::after { content: ' ▸'; }
+details.mais[open] > summary::after { content: ' ▾'; }
+details.mais > .conteudo { padding-bottom: 10px; }
+
+/* relatório de conferência */
+.resumo-rel { display: flex; gap: 6px; margin-bottom: 10px; }
+.resumo-rel span { flex: 1; text-align: center; border-radius: 8px; padding: 6px 4px; font-size: 12px; }
+.resumo-rel .ok, .item-rel.ok i { background: #e3f4ea; color: var(--verde); }
+.resumo-rel .atencao, .item-rel.atencao i { background: #fdf3dc; color: #a46a00; }
+.resumo-rel .problema, .item-rel.problema i { background: #fdecea; color: var(--vermelho); }
+.rel-amb { font-size: 12px; font-weight: 600; margin: 12px 0 4px; color: var(--suave); }
+.item-rel { display: grid; grid-template-columns: 22px 1fr; gap: 2px 8px; width: 100%; text-align: left; border: 0; padding: 7px 6px; border-radius: 8px; }
+.item-rel i { grid-row: span 2; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 700; }
+.item-rel b { font-size: 13px; font-weight: 600; }
+.item-rel small { font-size: 12px; color: var(--suave); }
+.item-rel.ativo { background: var(--azul-claro) !important; }
+
+@media (max-width: 860px) {
+  :root { --barra: 52px; --modos: 58px; }
+  #app, body.modo-visitar #app { grid-template: "barra" var(--barra) "palco" 1fr "modos" var(--modos) / 1fr; }
+  #barra { flex-wrap: nowrap; }
+  #abas { order: 0; flex-basis: auto; }
+  #modos button small { display: none; }
+  #modos button { grid-template-columns: auto; justify-items: center; row-gap: 0; }
+  #modos button span { grid-row: auto; font-size: 20px; }
+  #modos button b { font-size: 12px; }
+  #lateral { top: var(--barra) !important; bottom: var(--modos) !important; }
+  body.modo-visitar #lateral { display: none; }
+  #painel { bottom: var(--modos) !important; max-height: 52vh; }
+  #ferramentas { top: 8px; right: 8px; }
+  #ferramentas button { width: 50px; height: 46px; }
+  body.com-painel #ferramentas { right: 8px; }
+  body.com-painel #vistas, body.com-painel #bGaveta { display: none !important; }
+  #vistas { right: 8px; left: 8px; bottom: 8px; }
+  body:not(.modo-visitar) #bGaveta { display: block; position: absolute; left: 8px; bottom: 8px; z-index: 11; border-radius: 999px; padding: 10px 16px;
+    background: var(--texto); color: #fff; border-color: var(--texto); font-weight: 600; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
+  #avisos { bottom: 60px; }
+  #bLateral { display: none !important; }
+  #reguaBarra { top: auto; bottom: 12px; font-size: 12px; }
+  #reguaBarra span { display: none; }
+  #controlesEsq { left: 8px; top: 56px; }
+  #controlesEsq button { width: 42px; height: 42px; }
+  body:not(.modo-visitar) #vistas { top: 8px; left: 56px; right: 66px; }
+  #menuMais { align-items: flex-end; padding: 0; }
+  .folha-menu { width: 100%; border-radius: 18px 18px 0 0; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  /* gaveta do móvel: baixa por padrão; o puxador expande */
+  #painel { max-height: 40vh !important; padding-top: 4px; }
+  #painel.expandido { max-height: 78vh !important; }
+  .puxador { display: block; width: 100%; border: 0; background: none; padding: 2px 0 8px; color: var(--suave); font-size: 12px; }
+  .puxador::before { content: ''; display: block; width: 42px; height: 5px; border-radius: 3px; background: #d5d9de; margin: 2px auto 4px; }
+  body.com-painel #controlesEsq { top: 8px; }
+  body.com-painel #vistas { display: none !important; }
+}
+
+/* =====================================================================
+   PROJETOS E MODO PLANTA
+   ===================================================================== */
+#modos { grid-template-columns: repeat(4, 1fr); }
+body:not(.modo-desenhar) .so-desenhar { display: none !important; }
+body:not(.modo-desenhar):not(.modo-conferir) .so-areas { display: none !important; }
+body.modo-desenhar .nao-desenhar { display: none !important; }
+body:not(.modo-arrumar):not(.modo-desenhar) .edita { display: none !important; }
+body.modo-desenhar #avisos, body.modo-desenhar #bussola { display: none !important; }
+body.modo-desenhar #dica { top: auto; bottom: calc(var(--barra-desenho, 60px) + 22px); max-width: min(560px, calc(100% - 140px)); white-space: normal; text-align: center; border-radius: 12px; padding: 6px 12px; }
+#bProjeto { display: flex; align-items: center; gap: 6px; font-weight: 700; max-width: 260px; min-width: 0; border-color: transparent; padding: 6px 8px; }
+#bProjeto .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#bProjeto .seta { font-size: 11px; color: var(--suave); }
+.tab-areas tr.vazio td { color: var(--suave); font-style: italic; }
+
+/* barra de ferramentas de desenho, flutuando embaixo da cena */
+#barraDesenho { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 12; display: grid; gap: 6px; justify-items: center;
+  max-width: calc(100% - 24px); }
+body.com-painel #barraDesenho { left: calc(50% - var(--painel-w) / 2); }
+.ferr-linha { display: flex; gap: 4px; background: rgba(255,255,255,.96); border-radius: 14px; padding: 4px; box-shadow: 0 4px 18px rgba(20,30,40,.16); overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+.ferr-linha button { display: grid; place-items: center; gap: 1px; min-width: 62px; padding: 6px 6px 5px; border: 0; border-radius: 10px; background: none; }
+.ferr-linha button span { font-size: 18px; line-height: 1.1; }
+.ferr-linha button small { font-size: 11px; color: var(--suave); white-space: nowrap; }
+.ferr-linha button.ativo { background: var(--texto); color: #fff; }
+.ferr-linha button.ativo small { color: #dfe4ea; }
+.ferr-medida { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; background: rgba(29,37,48,.94); color: #fff; border-radius: 12px; padding: 6px 8px; box-shadow: 0 4px 18px rgba(20,30,40,.2); font-size: 13px; }
+.ferr-medida label { display: flex; align-items: center; gap: 4px; background: #fff; border-radius: 8px; padding: 2px 8px; color: var(--texto); }
+.ferr-medida input { width: 76px; border: 0; outline: 0; font: inherit; font-size: 16px; font-variant-numeric: tabular-nums; padding: 4px 0; }
+.ferr-medida em { font-style: normal; font-size: 12px; color: var(--suave); }
+.ferr-medida button { border: 0; background: rgba(255,255,255,.16); color: #fff; border-radius: 8px; min-width: 36px; height: 34px; padding: 0 10px; }
+.ferr-medida button.acao-sec { background: var(--azul); }
+.ferr-medida span { max-width: 360px; opacity: .9; }
+body.modo-desenhar[data-ferramenta="parede"] #palco canvas, body.modo-desenhar[data-ferramenta="calibrar"] #palco canvas,
+body.modo-desenhar[data-ferramenta="moverFundo"] #palco canvas, body.modo-desenhar[data-ferramenta="porta"] #palco canvas,
+body.modo-desenhar[data-ferramenta="janela"] #palco canvas, body.modo-desenhar[data-ferramenta="correr"] #palco canvas { cursor: crosshair; }
+body.modo-desenhar[data-ferramenta="apagar"] #palco canvas { cursor: not-allowed; }
+
+/* cotas e marcas do desenho */
+#rotulosDesenho { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+body:not(.modo-desenhar) #rotulosDesenho { display: none; }
+.cota-parede { position: absolute; left: 0; top: 0; font-size: 11px; font-weight: 600; color: #4a5563; background: rgba(255,255,255,.82); padding: 0 5px; border-radius: 5px;
+  white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cota-parede.ativa { background: var(--azul); color: #fff; font-size: 12px; padding: 1px 7px; }
+.cota-parede.encaixe { background: none; color: #1e8449; font-weight: 600; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+
+/* planta de fundo */
+.fundo-nome { display: grid; gap: 2px; margin-bottom: 6px; }
+.fundo-nome b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fundo-nome small { color: var(--suave); font-size: 12px; }
+#fundo .faixa-hora input { accent-color: var(--azul); }
+#fundo > button { width: 100%; }
+
+/* janela de projetos */
+dialog.projetos { width: min(620px, 94vw); max-height: 86vh; padding: 16px 18px; }
+dialog.projetos header { display: flex; justify-content: space-between; align-items: center; }
+dialog.projetos header h3 { margin: 0; }
+dialog .x { border: 0; background: none; font-size: 18px; padding: 4px 8px; }
+dialog.projetos .novos button.acao { width: auto; padding: 6px 12px; }
+#listaProjetos { display: grid; gap: 8px; margin-top: 12px; }
+.projeto { border: 1px solid var(--linha); border-radius: 12px; padding: 8px; display: grid; gap: 6px; }
+.projeto.atual { border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-claro); }
+.projeto .abrir { border: 0; background: none; text-align: left; display: grid; gap: 2px; padding: 4px 6px; }
+.projeto .abrir b { font-size: 15px; }
+.projeto .abrir em { font-style: normal; font-weight: 400; color: var(--azul); font-size: 12px; }
+.projeto .abrir small { color: var(--suave); font-size: 12px; }
+.acoes-projeto { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px 2px; }
+.acoes-projeto button { font-size: 12px; padding: 4px 9px; }
+#dlgCampos menu button.ok { background: var(--azul); color: #fff; border-color: var(--azul); }
+
+@media (max-width: 860px) {
+  #modos { grid-template-columns: repeat(4, 1fr); }
+  #bProjeto { max-width: 42vw; }
+  #barraDesenho { left: 8px; right: 8px; bottom: 8px; transform: none; max-width: none; }
+  body.com-painel #barraDesenho { display: none; }
+  .ferr-linha button { min-width: 54px; }
+  body.modo-desenhar #vistas { display: none !important; }
+  body.modo-desenhar #bGaveta { top: 8px; bottom: auto; left: 56px; }
+  body.modo-desenhar #dica { max-width: calc(100% - 24px); }
+  .acoes-projeto button { padding: 6px 10px; }
+  /* com a gaveta aberta, o botão fica ao lado dela e fecha */
+  body.lateral-aberta #bGaveta { z-index: 35; top: 8px; bottom: auto; left: calc(min(88vw, 320px) + 8px); }
+}
+</style>
+</head>
+<body>
+<!-- =====================================================================
+     INTERFACE
+     ===================================================================== -->
+<div id="app">
+  <header id="barra">
+    <button id="bProjeto" title="Projetos: abrir, criar, duplicar, renomear, apagar"><span aria-hidden="true">📁</span><span class="nome"></span><span aria-hidden="true" class="seta">▾</span></button>
+    <nav id="abas" aria-label="Opções do projeto"></nav>
+    <div class="acoes">
+      <button id="bMais" aria-haspopup="dialog" title="Salvar, exportar, imagem…"><span aria-hidden="true">⋯</span> <span class="texto">Mais</span></button>
+    </div>
+  </header>
+
+  <aside id="lateral">
+    <!-- Arrumar -->
+    <section class="lat so-arrumar">
+      <h2>Adicionar móvel</h2>
+      <input id="buscaCatalogo" type="search" placeholder="Buscar: sofá, mesa, planta…">
+      <div id="catalogo"></div>
+      <button id="bGLB2" style="width:100%;margin-top:10px">Importar modelo .glb…</button>
+      <h2>Cantos</h2>
+      <div id="cantos"></div>
+      <h2>Mostrar</h2>
+      <div id="mostrar"></div>
+    </section>
+    <!-- Planta -->
+    <section class="lat so-desenhar">
+      <h2>Paredes</h2>
+      <div id="opcoesDesenho"></div>
+      <h2>Planta de fundo</h2>
+      <div id="fundo"></div>
+    </section>
+    <!-- Conferir -->
+    <section class="lat so-conferir">
+      <h2>Conferir espaços</h2>
+      <div id="relatorio"></div>
+      <h2>Luz do sol</h2>
+      <div id="luz"></div>
+    </section>
+    <!-- Planta e Conferir -->
+    <section class="lat so-areas">
+      <h2>Ambientes e áreas</h2>
+      <div id="areas"></div>
+    </section>
+    <section class="lat so-desenhar">
+      <h2>Demolição</h2>
+      <div id="demolicao"></div>
+    </section>
+    <div id="salvo"></div>
+  </aside>
+
+  <main id="palco">
+    <div id="rotulos"></div>
+    <div id="rotulosDesenho"></div>
+    <div id="cotas"></div>
+    <div id="bussola" title="Norte"><svg viewBox="0 0 40 40" width="40" height="40"><circle cx="20" cy="20" r="18" fill="rgba(255,255,255,.88)" stroke="#d5dae0"/><path d="M20 5 L26 21 L20 18 L14 21 Z" fill="#d0453b"/><path d="M20 35 L14 19 L20 22 L26 19 Z" fill="#9aa3ad"/></svg><b>N</b></div>
+    <div id="dica" hidden></div>
+    <div id="avisos" hidden></div>
+
+    <!-- ferramentas da vista (todas os modos) -->
+    <div id="ferramentas">
+      <button id="bCaminhar" class="nao-desenhar" title="Andar por dentro, na altura dos olhos (C)"><span aria-hidden="true">🚶</span><span class="rot">Andar</span></button>
+      <button id="bVista" class="nao-desenhar" title="Planta vista de cima (T)"><span aria-hidden="true">▦</span><span class="rot">Planta</span></button>
+      <button id="bCorte" class="nao-desenhar" title="Baixar as paredes para ver o interior"><span aria-hidden="true">✂</span><span class="rot">Cortar</span></button>
+      <button id="bFoto" class="nao-desenhar" title="Foto realista (F)"><span aria-hidden="true">📷</span><span class="rot">Foto</span></button>
+      <button id="bRegua" title="Régua: medir entre dois pontos (M)"><span aria-hidden="true">📐</span><span class="rot">Medir</span></button>
+      <button id="bUso" class="nao-desenhar" title="Simular o uso: portas, armários, TV, cadeiras e fogão abrindo e fechando juntos"><span aria-hidden="true">▶</span><span class="rot">Usar</span></button>
+      <button id="bEnquadrar" title="Ver o projeto inteiro"><span aria-hidden="true">⤢</span><span class="rot">Inteiro</span></button>
+    </div>
+
+    <!-- zoom e desfazer, na lateral esquerda da cena -->
+    <div id="controlesEsq">
+      <button id="bZoomMais" title="Aproximar (+)" aria-label="Aproximar">＋</button>
+      <button id="bZoomMenos" title="Afastar (−)" aria-label="Afastar">－</button>
+      <button id="bDesfazer" class="edita" title="Desfazer (Ctrl+Z)" aria-label="Desfazer">↶</button>
+      <button id="bRefazer" class="edita" title="Refazer (Ctrl+Shift+Z)" aria-label="Refazer">↷</button>
+    </div>
+    <!-- Visitar: atalhos de cômodos e hora do sol -->
+    <div id="vistas"></div>
+    <div id="solVisita" class="so-visitar" hidden>
+      <div class="foto-topo"><b>☀ Luz do dia</b><span id="solVisitaTxt"></span></div>
+      <input id="solVisitaHora" type="range" min="5" max="20" step="0.25">
+      <div class="linha-botoes"><button id="solVisitaDia">▶ Passar o dia</button><button id="solVisitaFechar">Fechar</button></div>
+    </div>
+
+    <!-- Planta: ferramentas de desenho (e a medida do trecho, ao desenhar paredes) -->
+    <div id="barraDesenho" class="so-desenhar"></div>
+
+    <!-- Planta/Arrumar/Conferir no celular: abre a gaveta lateral -->
+    <button id="bGaveta"></button>
+
+    <!-- Foto realista em 3 passos: escolher (onde e quando) → revelar → ver e salvar -->
+    <div id="fotoMenu" class="foto-folha" hidden>
+      <div class="foto-topo"><b>📷 Foto realista</b><button id="fotoMenuFechar" class="x" aria-label="Fechar">✕</button></div>
+      <p class="nota">A luz é calculada de verdade (sol, janelas, reflexos). Escolha o cômodo e a hora e toque em Fotografar: a foto fica pronta em 1 a 3 minutos.</p>
+      <h4>Onde</h4><div id="fotoOnde" class="chips"></div>
+      <h4>Quando</h4><div id="fotoQuando" class="chips"></div>
+      <button id="fotoIr" class="grande">📷 Fotografar</button>
+    </div>
+    <div id="fotoRevelando" class="foto-tela" hidden>
+      <img id="fotoPrevia" alt="">
+      <div class="foto-cartao">
+        <b>Revelando a foto…</b>
+        <div class="foto-barra"><i id="fotoBarra"></i></div>
+        <span id="fotoStatus"></span>
+        <div class="linha-botoes"><button id="fotoJa">Ver já (menos nítida)</button><button id="fotoCancelar">Cancelar</button></div>
+      </div>
+    </div>
+    <div id="fotoPronta" class="foto-tela" hidden>
+      <img id="fotoImg" alt="Foto realista do projeto">
+      <div class="foto-cartao">
+        <div class="linha-botoes luz"><span>Luz</span><button id="fotoEscura">− Mais escura</button><button id="fotoClara">＋ Mais clara</button></div>
+        <div class="linha-botoes"><button id="fotoSalvar" class="acao-sec">⬇ Salvar foto</button><button id="fotoOutra">Outra foto</button><button id="fotoFechar">Fechar</button></div>
+        <p class="nota">No celular, também dá para tocar e segurar na foto para salvar.</p>
+      </div>
+    </div>
+    <!-- Simulação de uso: tudo abre e fecha junto, em laço -->
+    <div id="usoBarra" hidden>
+      <b>▶ Simulação de uso</b><span id="usoTxt"></span>
+      <button id="usoMedidas" class="medir" title="Mostrar medidas: quanto abre e quanto sobra">📏</button><button id="usoPausa" aria-label="Pausar">⏸</button><button id="usoFechar" aria-label="Parar">✕</button>
+    </div>
+    <div id="medidasUso"></div>
+    <div id="reguaRotulos"></div>
+    <div id="reguaBarra" hidden><b>📐 Régua</b><span>toque em dois pontos para medir</span><button id="reguaLimpar">Limpar</button><button id="reguaFechar" aria-label="Fechar">✕</button></div>
+    <div id="ajuda" class="so-arrumar">Clique seleciona · arraste o selecionado · setas: tamanho · alça redonda: girar · Shift+clique: alinhar · M: régua · +/−: zoom</div>
+  </main>
+
+  <aside id="painel"></aside>
+
+  <nav id="modos" aria-label="Modo">
+    <button data-modo="desenhar" title="Planta (tecla 1)"><span aria-hidden="true">📐</span><b>Planta</b><small>paredes, portas e janelas</small></button>
+    <button data-modo="arrumar" title="Arrumar (tecla 2)"><span aria-hidden="true">🛋</span><b>Arrumar</b><small>mover e trocar móveis</small></button>
+    <button data-modo="conferir" title="Conferir (tecla 3)"><span aria-hidden="true">✅</span><b>Conferir</b><small>espaços e medidas</small></button>
+    <button data-modo="visitar" title="Visitar (tecla 4)"><span aria-hidden="true">👁</span><b>Visitar</b><small>passear e fotografar</small></button>
+  </nav>
+</div>
+
+<!-- Menu "Mais": botões grandes; no celular sobe de baixo -->
+<div id="menuMais" hidden>
+  <div class="folha-menu" role="dialog" aria-label="Mais opções">
+    <header><b>Mais opções</b><button id="menuFechar" aria-label="Fechar">✕</button></header>
+    <button id="bProjetos"><span>📁</span><b>Projetos</b><small>abrir, criar, duplicar, renomear, apagar</small></button>
+    <button id="bPNG"><span>🖼</span><b>Salvar imagem</b><small>PNG da vista atual, com as áreas</small></button>
+    <button id="bSalvar"><span>💾</span><b>Salvar agora</b><small>o projeto já se salva sozinho neste aparelho</small></button>
+    <button id="bExportar"><span>⬇</span><b>Exportar projeto</b><small>arquivo .json com tudo, para guardar ou levar a outro aparelho</small></button>
+    <button id="bImportar"><span>⬆</span><b>Importar projeto</b><small>abrir um .json exportado (entra como projeto novo)</small></button>
+    <button id="bGLB"><span>📦</span><b>Importar modelo 3D</b><small>arquivo .glb de um móvel pronto</small></button>
+  </div>
+</div>
+<div id="toast" role="status"></div>
+<input type="file" id="arqJSON" accept=".json,application/json" hidden>
+<input type="file" id="arqGLB" accept=".glb,.gltf" hidden>
+<input type="file" id="arqFundo" accept="image/*,.pdf,application/pdf" hidden>
+
+<!-- Projetos: um por cliente -->
+<dialog id="dlgProjetos" class="projetos">
+  <header><h3>Projetos</h3><button id="projetosFechar" class="x" aria-label="Fechar">✕</button></header>
+  <div class="linha-botoes novos">
+    <button id="novoEmBranco" class="acao">＋ Novo em branco</button>
+    <button id="novoExemplo">＋ Novo a partir do exemplo</button>
+    <button id="importarProjeto">⬆ Importar .json</button>
+  </div>
+  <div id="listaProjetos"></div>
+  <p class="nota">Os projetos ficam salvos neste aparelho. Para guardar uma cópia ou levar a outro aparelho, use Exportar.</p>
+</dialog>
+
+<!-- Janela de campos (nome do projeto, medida da calibração, página do PDF…) -->
+<dialog id="dlgCampos"><form method="dialog"></form></dialog>
+
+<dialog id="dlgGLB">
+  <form method="dialog">
+    <h3>Importar modelo .glb</h3>
+    <label class="campo largo"><span>Nome no catálogo</span><input id="glbNome" type="text"></label>
+    <p>Tamanho no arquivo: <b id="glbOriginal"></b></p>
+    <label class="campo"><span>1 unidade do arquivo equivale a</span><input id="glbEscala" type="text" inputmode="decimal"><em>cm</em></label>
+    <p>Resultado: <b id="glbResultado"></b> (L × P × A). Dá para mudar as medidas depois, no painel do móvel.</p>
+    <menu><button value="cancel">Cancelar</button><button value="ok">Adicionar ao catálogo</button></menu>
+  </form>
+</dialog>
+
+<!-- =====================================================================
+     BIBLIOTECA 3D (three.js embutido — funciona sem internet)
+     ===================================================================== -->
+<script>/*@THREE@*/</script>
+
+<!-- =====================================================================
+     CATÁLOGO DE MÓVEIS (dados)
+     ===================================================================== -->
+<script>/*@CATALOGO@*/</script>
+
+<!-- =====================================================================
+     PLANTA E CENÁRIOS (dados)
+     ===================================================================== -->
+<script>/*@PLANTA@*/</script>
+
+<!-- =====================================================================
+     APLICAÇÃO
+     ===================================================================== -->
+<script>/*@APP@*/</script>
+
+<!-- =====================================================================
+     PDF.JS (comprimido; só é aberto ao carregar um PDF de fundo)
+     ===================================================================== -->
+<script type="application/octet-stream" id="pdfjsZ">/*@PDFJS@*/</script>
+<script type="application/octet-stream" id="pdfjsWorkerZ">/*@PDFJS_WORKER@*/</script>
+</body>
+</html>

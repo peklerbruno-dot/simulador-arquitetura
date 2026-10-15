@@ -1,0 +1,8 @@
+three-pacote.min.js é gerado a partir de entrada-three.js com:
+  npm i three@0.170.0 three-gpu-pathtracer@0.0.23 three-mesh-bvh@0.8.3 esbuild
+  npx esbuild entrada-three.js --bundle --minify --format=iife --legal-comments=none --outfile=three-pacote.min.js
+(e o comentário de licença na primeira linha).
+
+pdfjs/ vem de pdfjs-dist@3.11.174 (legacy/build/pdf.min.js e pdf.worker.min.js),
+licença Apache 2.0 (pdfjs/LICENSE). montar.mjs comprime os dois (gzip + base64)
+dentro do simulador.html; só são abertos quando se carrega um PDF de fundo.

@@ -1,0 +1,16 @@
+{
+  "name": "Simulador de Interiores",
+  "short_name": "Interiores",
+  "description": "Simulador 3D de interiores: desenhar a planta, arrumar os móveis, conferir os espaços e visitar.",
+  "lang": "pt-BR",
+  "start_url": "../simulador.html",
+  "scope": "../",
+  "display": "standalone",
+  "background_color": "#f6f7f9",
+  "theme_color": "#1d2530",
+  "icons": [
+    { "src": "icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icone-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
